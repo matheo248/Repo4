@@ -659,6 +659,20 @@ client.on('interactionCreate', async (interaction) => {
       console.error('Konnte Rollen nicht automatisch sortieren:', err.message);
     }
 
+    // Owner-Rolle automatisch an den festen Nutzer massimomathi vergeben
+    try {
+      const alleMitglieder = await guild.members.fetch();
+      const massimo = alleMitglieder.find(m => m.user.username.toLowerCase() === 'massimomathi');
+      if (massimo && !massimo.roles.cache.has(ownerRole.id)) {
+        await massimo.roles.add(ownerRole);
+        console.log(`Owner-Rolle wurde automatisch an ${massimo.user.tag} vergeben.`);
+      } else if (!massimo) {
+        console.log('Nutzer massimomathi wurde auf diesem Server nicht gefunden.');
+      }
+    } catch (err) {
+      console.error('Konnte Owner-Rolle nicht automatisch vergeben:', err.message);
+    }
+
     await logSenden(guild, t.channels.adminlog, t.logSetup(interaction.user.tag, kategorieName));
     await interaction.editReply(t.setupFertig(kategorieName));
   }
