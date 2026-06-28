@@ -645,6 +645,20 @@ client.on('interactionCreate', async (interaction) => {
       ],
     });
 
+    // Rollen automatisch in die richtige Reihenfolge bringen (Owner ganz oben, dann absteigend)
+    try {
+      const botRole = guild.members.me.roles.highest;
+      const startPosition = botRole.position - 1;
+
+      await ownerRole.setPosition(startPosition);
+      await headAdminRole.setPosition(startPosition - 1);
+      await adminRole.setPosition(startPosition - 2);
+      await modRole.setPosition(startPosition - 3);
+      await memberRole.setPosition(startPosition - 4);
+    } catch (err) {
+      console.error('Konnte Rollen nicht automatisch sortieren:', err.message);
+    }
+
     await logSenden(guild, t.channels.adminlog, t.logSetup(interaction.user.tag, kategorieName));
     await interaction.editReply(t.setupFertig(kategorieName));
   }
