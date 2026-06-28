@@ -229,6 +229,12 @@ const texte = {
       base: '🏠 base',
       team: '👥 team',
       voice: '🔊 voice-chat',
+      raids: '⚔️ raids',
+      trading: '🛒 trading',
+      pvpclips: '🎯 pvp-clips',
+      lootruns: '🔧 loot-runs',
+      wipeschedule: '📅 wipe-schedule',
+      squadvoice: '🎙️ squad-voice',
     },
     keinGrund: 'Kein Grund angegeben',
     regelnText: '📋 **Serverregeln**\n\n1. Sei respektvoll zu allen Mitgliedern.\n2. Kein Spam, keine Werbung.\n3. Keine NSFW-Inhalte.\n4. Keine Beleidigungen oder Hassrede.\n5. Halte dich an die Discord-Richtlinien.\n6. Anweisungen vom Team sind zu befolgen.\n\nVerstoesse koennen zu Verwarnung, Timeout, Kick oder Bann fuehren.',
@@ -299,6 +305,12 @@ const texte = {
       base: '🏠 base',
       team: '👥 team',
       voice: '🔊 voice-chat',
+      raids: '⚔️ raids',
+      trading: '🛒 trading',
+      pvpclips: '🎯 pvp-clips',
+      lootruns: '🔧 loot-runs',
+      wipeschedule: '📅 wipe-schedule',
+      squadvoice: '🎙️ squad-voice',
     },
     keinGrund: 'No reason given',
     regelnText: '📋 **Server Rules**\n\n1. Be respectful to all members.\n2. No spam, no advertising.\n3. No NSFW content.\n4. No insults or hate speech.\n5. Follow the Discord Terms of Service.\n6. Follow staff instructions.\n\nViolations may lead to warning, timeout, kick or ban.',
@@ -359,6 +371,21 @@ function istAdminOderHoeher(member, t) {
 function istNurModerator(member, t) {
   const hatModRolle = member.roles.cache.some(r => r.name === t.rollen.mod);
   return hatModRolle && !istAdminOderHoeher(member, t);
+}
+
+// Findet einen Text/Voice-Channel per Namen, oder erstellt ihn neu falls er nicht existiert.
+// So wird bei mehrfachem /setup kein Duplikat erzeugt.
+async function channelOderErstellen(guild, optionen) {
+  const vorhanden = guild.channels.cache.find(c => c.name === optionen.name && c.type === optionen.type);
+  if (vorhanden) return vorhanden;
+  return guild.channels.create(optionen);
+}
+
+// Findet eine Kategorie per Namen, oder erstellt sie neu falls sie nicht existiert.
+async function kategorieOderErstellen(guild, name) {
+  const vorhanden = guild.channels.cache.find(c => c.name === name && c.type === ChannelType.GuildCategory);
+  if (vorhanden) return vorhanden;
+  return guild.channels.create({ name, type: ChannelType.GuildCategory });
 }
 
 // Prueft ob ein Member die Owner-Rolle hat
@@ -528,38 +555,44 @@ client.on('interactionCreate', async (interaction) => {
       });
 
     // Kategorie 1: Willkommen (oeffentlich, fuer jeden sichtbar)
-    const willkommenKategorie = await guild.channels.create({
-      name: t.kategorien.willkommen,
-      type: ChannelType.GuildCategory,
-    });
+    const willkommenKategorie = await kategorieOderErstellen(guild, t.kategorien.willkommen);
 
-    const welcomeChannel = await guild.channels.create({
-      name: t.channels.welcome,
-      type: ChannelType.GuildText,
-      parent: willkommenKategorie.id,
-      permissionOverwrites: [
-        { id: guild.roles.everyone.id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] },
-      ],
-    });
-    await welcomeChannel.send(t.willkommenText(guild.name));
+    let welcomeChannel = guild.channels.cache.find(c => c.name === t.channels.welcome && c.type === ChannelType.GuildText);
+    const welcomeExistierteSchon = !!welcomeChannel;
+    if (!welcomeChannel) {
+      welcomeChannel = await guild.channels.create({
+        name: t.channels.welcome,
+        type: ChannelType.GuildText,
+        parent: willkommenKategorie.id,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] },
+        ],
+      });
+    }
+    if (!welcomeExistierteSchon) {
+      await welcomeChannel.send(t.willkommenText(guild.name));
+    }
 
-    const rulesChannel = await guild.channels.create({
-      name: t.channels.rules,
-      type: ChannelType.GuildText,
-      parent: willkommenKategorie.id,
-      permissionOverwrites: [
-        { id: guild.roles.everyone.id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] },
-      ],
-    });
-    await rulesChannel.send(t.regelnText);
+    let rulesChannel = guild.channels.cache.find(c => c.name === t.channels.rules && c.type === ChannelType.GuildText);
+    const rulesExistierteSchon = !!rulesChannel;
+    if (!rulesChannel) {
+      rulesChannel = await guild.channels.create({
+        name: t.channels.rules,
+        type: ChannelType.GuildText,
+        parent: willkommenKategorie.id,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] },
+        ],
+      });
+    }
+    if (!rulesExistierteSchon) {
+      await rulesChannel.send(t.regelnText);
+    }
 
     // Kategorie 2: Bewerbung (eigene Kategorie, oeffentlich)
-    const bewerbungKategorie = await guild.channels.create({
-      name: t.kategorien.bewerbung,
-      type: ChannelType.GuildCategory,
-    });
+    const bewerbungKategorie = await kategorieOderErstellen(guild, t.kategorien.bewerbung);
 
-    await guild.channels.create({
+    await channelOderErstellen(guild, {
       name: t.channels.apply,
       type: ChannelType.GuildText,
       parent: bewerbungKategorie.id,
@@ -569,13 +602,10 @@ client.on('interactionCreate', async (interaction) => {
     });
 
     // Kategorie 3: Hauptkategorie
-    const category = await guild.channels.create({
-      name: kategorieName,
-      type: ChannelType.GuildCategory,
-    });
+    const category = await kategorieOderErstellen(guild, kategorieName);
 
     // Admin-Channel: nur Admin, Head Admin, Owner sehen ihn
-    await guild.channels.create({
+    await channelOderErstellen(guild, {
       name: t.channels.admin,
       type: ChannelType.GuildText,
       parent: category.id,
@@ -588,7 +618,7 @@ client.on('interactionCreate', async (interaction) => {
     });
 
     // mod-log: nur Owner und Head Admin sehen ihn
-    const modLogChannel = await guild.channels.create({
+    await channelOderErstellen(guild, {
       name: t.channels.modlog,
       type: ChannelType.GuildText,
       parent: category.id,
@@ -600,7 +630,7 @@ client.on('interactionCreate', async (interaction) => {
     });
 
     // admin-log: nur Owner und Head Admin sehen ihn
-    const adminLogChannel = await guild.channels.create({
+    await channelOderErstellen(guild, {
       name: t.channels.adminlog,
       type: ChannelType.GuildText,
       parent: category.id,
@@ -612,10 +642,19 @@ client.on('interactionCreate', async (interaction) => {
     });
 
     // Channels fuer Member und alle drueber
-    const memberChannels = [t.channels.chat, t.channels.map, t.channels.base, t.channels.team];
+    const memberChannels = [
+      t.channels.chat,
+      t.channels.map,
+      t.channels.base,
+      t.channels.team,
+      t.channels.raids,
+      t.channels.pvpclips,
+      t.channels.lootruns,
+      t.channels.wipeschedule,
+    ];
 
     for (const name of memberChannels) {
-      await guild.channels.create({
+      await channelOderErstellen(guild, {
         name,
         type: ChannelType.GuildText,
         parent: category.id,
@@ -630,20 +669,23 @@ client.on('interactionCreate', async (interaction) => {
       });
     }
 
-    // Voice-Channel fuer Member und alle drueber
-    await guild.channels.create({
-      name: t.channels.voice,
-      type: ChannelType.GuildVoice,
-      parent: category.id,
-      permissionOverwrites: [
-        { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        { id: memberRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
-        { id: modRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
-        { id: adminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
-        { id: headAdminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
-        { id: ownerRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
-      ],
-    });
+    // Voice-Channels fuer Member und alle drueber
+    const memberVoiceChannels = [t.channels.voice, t.channels.squadvoice];
+    for (const name of memberVoiceChannels) {
+      await channelOderErstellen(guild, {
+        name,
+        type: ChannelType.GuildVoice,
+        parent: category.id,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: memberRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+          { id: modRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+          { id: adminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+          { id: headAdminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+          { id: ownerRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+        ],
+      });
+    }
 
     // Rollen automatisch in die richtige Reihenfolge bringen (Owner ganz oben, dann absteigend)
     try {
