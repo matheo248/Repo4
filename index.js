@@ -83,6 +83,30 @@ const slashCommands = [
       sprachWahl,
     ],
   },
+  {
+    name: 'unban',
+    description: 'Hebt einen Bann auf',
+    options: [
+      { name: 'userid', description: 'Die User-ID der Person', type: 3, required: false },
+      sprachWahl,
+    ],
+  },
+  {
+    name: 'untimeout',
+    description: 'Hebt einen Mute/Timeout vorzeitig auf',
+    options: [
+      { name: 'user', description: 'Wer soll entmutet werden', type: 6, required: false },
+      sprachWahl,
+    ],
+  },
+  {
+    name: 'purge',
+    description: 'Loescht mehrere Nachrichten in diesem Channel',
+    options: [
+      { name: 'anzahl', description: 'Wie viele Nachrichten loeschen (1-100)', type: 4, required: true },
+      sprachWahl,
+    ],
+  },
 ];
 
 async function befehleRegistrieren() {
@@ -186,6 +210,14 @@ const texte = {
     logMute: (mod, user, grund) => `🔇 **Mute**\nVon: ${mod}\nNutzer: ${user}\nGrund: ${grund}`,
     logSetup: (mod, kat) => `⚙️ **Setup ausgefuehrt**\nVon: ${mod}\nKategorie: ${kat}`,
     logReset: (mod) => `🗑️ **Reset ausgefuehrt**\nVon: ${mod}\nAlle Channels, Kategorien und Rollen wurden geloescht.`,
+    entbannt: (id) => `Bann fuer User-ID ${id} wurde aufgehoben.`,
+    bitteUserId: 'Bitte eine gueltige User-ID angeben.',
+    entmutet: (u) => `${u} wurde entmutet.`,
+    purgeFertig: (n) => `${n} Nachrichten wurden geloescht.`,
+    purgeUngueltig: 'Bitte eine Zahl zwischen 1 und 100 angeben.',
+    logUnban: (mod, id) => `🔓 **Unban**\nVon: ${mod}\nUser-ID: ${id}`,
+    logUntimeout: (mod, user) => `🔊 **Untimeout**\nVon: ${mod}\nNutzer: ${user}`,
+    logPurge: (mod, n, kanal) => `🧹 **Purge**\nVon: ${mod}\nAnzahl: ${n}\nChannel: ${kanal}`,
   },
   en: {
     nurAdmins: 'Only admins can use this.',
@@ -214,6 +246,8 @@ const texte = {
       rules: '📋 rules',
       apply: '📝 apply',
       admin: '🔒 admin',
+      modlog: '📂 mod-log',
+      adminlog: '🗂️ admin-log',
       chat: '💬 chat',
       map: '🗺️ map',
       base: '🏠 base',
@@ -223,6 +257,20 @@ const texte = {
     keinGrund: 'No reason given',
     regelnText: '📋 **Server Rules**\n\n1. Be respectful to all members.\n2. No spam, no advertising.\n3. No NSFW content.\n4. No insults or hate speech.\n5. Follow the Discord Terms of Service.\n6. Follow staff instructions.\n\nViolations may lead to warning, timeout, kick or ban.',
     willkommenText: (servername) => `👋 **Welcome to ${servername}!**\n\nGlad to have you here. Please read the rules first and then apply in the apply channel to get full access.\n\nHave fun on the server!`,
+    logKick: (mod, user, grund) => `👢 **Kick**\nBy: ${mod}\nUser: ${user}\nReason: ${grund}`,
+    logBan: (mod, user, grund) => `🔨 **Ban**\nBy: ${mod}\nUser: ${user}\nReason: ${grund}`,
+    logWarn: (mod, user, grund) => `⚠️ **Warning**\nBy: ${mod}\nUser: ${user}\nReason: ${grund}`,
+    logMute: (mod, user, grund) => `🔇 **Mute**\nBy: ${mod}\nUser: ${user}\nReason: ${grund}`,
+    logSetup: (mod, kat) => `⚙️ **Setup executed**\nBy: ${mod}\nCategory: ${kat}`,
+    logReset: (mod) => `🗑️ **Reset executed**\nBy: ${mod}\nAll channels, categories and roles were deleted.`,
+    entbannt: (id) => `Ban for user ID ${id} was lifted.`,
+    bitteUserId: 'Please provide a valid user ID.',
+    entmutet: (u) => `${u} was untimed out.`,
+    purgeFertig: (n) => `${n} messages were deleted.`,
+    purgeUngueltig: 'Please provide a number between 1 and 100.',
+    logUnban: (mod, id) => `🔓 **Unban**\nBy: ${mod}\nUser ID: ${id}`,
+    logUntimeout: (mod, user) => `🔊 **Untimeout**\nBy: ${mod}\nUser: ${user}`,
+    logPurge: (mod, n, kanal) => `🧹 **Purge**\nBy: ${mod}\nCount: ${n}\nChannel: ${kanal}`,
   },
 };
 
@@ -554,6 +602,55 @@ client.on('interactionCreate', async (interaction) => {
       await logSenden(interaction.guild, t.channels.modlog, t.logMute(interaction.user.tag, target.user.tag, t.keinGrund));
     }
     await interaction.reply(t.gemutet(target.user.tag));
+  }
+
+  // ---------- /unban ----------
+  if (commandName === 'unban') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+      return interaction.reply({ content: t.keineBerechtigung, ephemeral: true });
+    }
+    const userId = interaction.options.getString('userid');
+    if (!userId) return interaction.reply({ content: t.bitteUserId, ephemeral: true });
+    try {
+      await interaction.guild.bans.remove(userId);
+    } catch (err) {
+      return interaction.reply({ content: t.bitteUserId, ephemeral: true });
+    }
+    if (istNurModerator(interaction.member, t)) {
+      await logSenden(interaction.guild, t.channels.modlog, t.logUnban(interaction.user.tag, userId));
+    }
+    await interaction.reply(t.entbannt(userId));
+  }
+
+  // ---------- /untimeout ----------
+  if (commandName === 'untimeout') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+      return interaction.reply({ content: t.keineBerechtigung, ephemeral: true });
+    }
+    const target = interaction.options.getMember('user');
+    if (!target) return interaction.reply({ content: t.bitteErwaehnenKick, ephemeral: true });
+    await target.timeout(null);
+    if (istNurModerator(interaction.member, t)) {
+      await logSenden(interaction.guild, t.channels.modlog, t.logUntimeout(interaction.user.tag, target.user.tag));
+    }
+    await interaction.reply(t.entmutet(target.user.tag));
+  }
+
+  // ---------- /purge ----------
+  if (commandName === 'purge') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+      return interaction.reply({ content: t.keineBerechtigung, ephemeral: true });
+    }
+    const anzahl = interaction.options.getInteger('anzahl');
+    if (!anzahl || anzahl < 1 || anzahl > 100) {
+      return interaction.reply({ content: t.purgeUngueltig, ephemeral: true });
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const geloescht = await interaction.channel.bulkDelete(anzahl, true);
+    if (istNurModerator(interaction.member, t)) {
+      await logSenden(interaction.guild, t.channels.modlog, t.logPurge(interaction.user.tag, geloescht.size, interaction.channel.name));
+    }
+    await interaction.editReply(t.purgeFertig(geloescht.size));
   }
 });
 
