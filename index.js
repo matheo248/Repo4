@@ -169,6 +169,8 @@ const texte = {
       rules: '📋 rules',
       apply: '📝 apply',
       admin: '🔒 admin',
+      modlog: '📂 mod-log',
+      adminlog: '🗂️ admin-log',
       chat: '💬 chat',
       map: '🗺️ map',
       base: '🏠 base',
@@ -178,6 +180,12 @@ const texte = {
     keinGrund: 'Kein Grund angegeben',
     regelnText: '📋 **Serverregeln**\n\n1. Sei respektvoll zu allen Mitgliedern.\n2. Kein Spam, keine Werbung.\n3. Keine NSFW-Inhalte.\n4. Keine Beleidigungen oder Hassrede.\n5. Halte dich an die Discord-Richtlinien.\n6. Anweisungen vom Team sind zu befolgen.\n\nVerstoesse koennen zu Verwarnung, Timeout, Kick oder Bann fuehren.',
     willkommenText: (servername) => `👋 **Willkommen auf ${servername}!**\n\nSchoen, dass du da bist. Lies dir bitte zuerst die Regeln durch und bewirb dich anschliessend im Apply-Channel, um vollen Zugriff zu erhalten.\n\nViel Spass auf dem Server!`,
+    logKick: (mod, user, grund) => `👢 **Kick**\nVon: ${mod}\nNutzer: ${user}\nGrund: ${grund}`,
+    logBan: (mod, user, grund) => `🔨 **Ban**\nVon: ${mod}\nNutzer: ${user}\nGrund: ${grund}`,
+    logWarn: (mod, user, grund) => `⚠️ **Verwarnung**\nVon: ${mod}\nNutzer: ${user}\nGrund: ${grund}`,
+    logMute: (mod, user, grund) => `🔇 **Mute**\nVon: ${mod}\nNutzer: ${user}\nGrund: ${grund}`,
+    logSetup: (mod, kat) => `⚙️ **Setup ausgefuehrt**\nVon: ${mod}\nKategorie: ${kat}`,
+    logReset: (mod) => `🗑️ **Reset ausgefuehrt**\nVon: ${mod}\nAlle Channels, Kategorien und Rollen wurden geloescht.`,
   },
   en: {
     nurAdmins: 'Only admins can use this.',
@@ -218,6 +226,46 @@ const texte = {
   },
 };
 
+// Hilfsfunktion: findet einen Channel per Namen im Server und sendet eine Nachricht dorthin
+async function logSenden(guild, kanalName, text) {
+  try {
+    const kanal = guild.channels.cache.find(c => c.name === kanalName);
+    if (kanal) {
+      await kanal.send(text);
+    }
+  } catch (err) {
+    console.error(`Konnte nicht ins Log senden (${kanalName}):`, err.message);
+  }
+}
+
+// Prueft ob ein Member Admin oder hoeher ist (anhand der Rollennamen Admin/Head Admin/Owner)
+function istAdminOderHoeher(member, t) {
+  return member.roles.cache.some(r =>
+    r.name === t.rollen.admin || r.name === t.rollen.headadmin || r.name === t.rollen.owner
+  );
+}
+
+// Prueft ob ein Member (nur) Moderator ist, also Mod-Rolle hat aber NICHT Admin oder hoeher
+function istNurModerator(member, t) {
+  const hatModRolle = member.roles.cache.some(r => r.name === t.rollen.mod);
+  return hatModRolle && !istAdminOderHoeher(member, t);
+}
+
+// Prueft ob ein Member die Owner-Rolle hat
+function istOwner(member, t) {
+  return member.roles.cache.some(r => r.name === t.rollen.owner);
+}
+
+// Erlaubt /setup und /reset nur fuer Owner. Ausnahme: falls die Owner-Rolle noch nicht
+// existiert (allererstes Setup auf einem neuen Server), reicht Administrator.
+function darfSetupOderReset(member, guild, t) {
+  const ownerRolleExistiert = guild.roles.cache.some(r => r.name === t.rollen.owner);
+  if (!ownerRolleExistiert) {
+    return member.permissions.has(PermissionsBitField.Flags.Administrator);
+  }
+  return istOwner(member, t);
+}
+
 client.once('ready', async () => {
   console.log(`Bot ist online als ${client.user.tag}`);
   await befehleRegistrieren();
@@ -231,7 +279,7 @@ client.on('interactionCreate', async (interaction) => {
 
   // ---------- /setup ----------
   if (commandName === 'setup') {
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    if (!darfSetupOderReset(interaction.member, interaction.guild, t)) {
       return interaction.reply({ content: t.nurAdmins, ephemeral: true });
     }
 
@@ -350,6 +398,30 @@ client.on('interactionCreate', async (interaction) => {
       ],
     });
 
+    // mod-log: nur Owner und Head Admin sehen ihn
+    const modLogChannel = await guild.channels.create({
+      name: t.channels.modlog,
+      type: ChannelType.GuildText,
+      parent: category.id,
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+        { id: headAdminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+        { id: ownerRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+      ],
+    });
+
+    // admin-log: nur Owner und Head Admin sehen ihn
+    const adminLogChannel = await guild.channels.create({
+      name: t.channels.adminlog,
+      type: ChannelType.GuildText,
+      parent: category.id,
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+        { id: headAdminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+        { id: ownerRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+      ],
+    });
+
     // Channels fuer Member und alle drueber
     const memberChannels = [t.channels.chat, t.channels.map, t.channels.base, t.channels.team];
 
@@ -384,12 +456,13 @@ client.on('interactionCreate', async (interaction) => {
       ],
     });
 
+    await logSenden(guild, t.channels.adminlog, t.logSetup(interaction.user.tag, kategorieName));
     await interaction.editReply(t.setupFertig(kategorieName));
   }
 
   // ---------- /reset ----------
   if (commandName === 'reset') {
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    if (!darfSetupOderReset(interaction.member, interaction.guild, t)) {
       return interaction.reply({ content: t.nurAdmins, ephemeral: true });
     }
 
@@ -435,6 +508,9 @@ client.on('interactionCreate', async (interaction) => {
     const target = interaction.options.getMember('user');
     if (!target) return interaction.reply({ content: t.bitteErwaehnenKick, ephemeral: true });
     await target.kick();
+    if (istNurModerator(interaction.member, t)) {
+      await logSenden(interaction.guild, t.channels.modlog, t.logKick(interaction.user.tag, target.user.tag, t.keinGrund));
+    }
     await interaction.reply(t.gekickt(target.user.tag));
   }
 
@@ -446,6 +522,9 @@ client.on('interactionCreate', async (interaction) => {
     const target = interaction.options.getMember('user');
     if (!target) return interaction.reply({ content: t.bitteErwaehnenKick, ephemeral: true });
     await target.ban();
+    if (istNurModerator(interaction.member, t)) {
+      await logSenden(interaction.guild, t.channels.modlog, t.logBan(interaction.user.tag, target.user.tag, t.keinGrund));
+    }
     await interaction.reply(t.gebannt(target.user.tag));
   }
 
@@ -457,6 +536,9 @@ client.on('interactionCreate', async (interaction) => {
     const target = interaction.options.getMember('user');
     const grund = interaction.options.getString('grund') || t.keinGrund;
     if (!target) return interaction.reply({ content: t.bitteErwaehnenKick, ephemeral: true });
+    if (istNurModerator(interaction.member, t)) {
+      await logSenden(interaction.guild, t.channels.modlog, t.logWarn(interaction.user.tag, target.user.tag, grund));
+    }
     await interaction.reply(t.verwarnt(target.user.tag, grund));
   }
 
@@ -468,6 +550,9 @@ client.on('interactionCreate', async (interaction) => {
     const target = interaction.options.getMember('user');
     if (!target) return interaction.reply({ content: t.bitteErwaehnenKick, ephemeral: true });
     await target.timeout(10 * 60 * 1000, 'Gemutet per Command');
+    if (istNurModerator(interaction.member, t)) {
+      await logSenden(interaction.guild, t.channels.modlog, t.logMute(interaction.user.tag, target.user.tag, t.keinGrund));
+    }
     await interaction.reply(t.gemutet(target.user.tag));
   }
 });
