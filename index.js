@@ -21,7 +21,7 @@ client.on('messageCreate', async (message) => {
   // ---- SETUP COMMAND ----
   if (cmd === '!setup') {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return message.reply('Nur Admins dürfen !setup benutzen.');
+      return message.reply('Nur Admins duerfen !setup benutzen.');
     }
     const guild = message.guild;
 
@@ -80,7 +80,7 @@ client.on('messageCreate', async (message) => {
       return message.reply('Keine Berechtigung.');
     }
     const target = message.mentions.members.first();
-    if (!target) return message.reply('Bitte jemanden erwähnen: !kick @user');
+    if (!target) return message.reply('Bitte jemanden erwaehnen: !kick @user');
     await target.kick();
     message.reply(`${target.user.tag} wurde gekickt.`);
   }
@@ -90,7 +90,7 @@ client.on('messageCreate', async (message) => {
       return message.reply('Keine Berechtigung.');
     }
     const target = message.mentions.members.first();
-    if (!target) return message.reply('Bitte jemanden erwähnen: !ban @user');
+    if (!target) return message.reply('Bitte jemanden erwaehnen: !ban @user');
     await target.ban();
     message.reply(`${target.user.tag} wurde gebannt.`);
   }
@@ -101,10 +101,19 @@ client.on('messageCreate', async (message) => {
     }
     const target = message.mentions.members.first();
     const reason = args.slice(2).join(' ') || 'Kein Grund angegeben';
-    if (!target) return message.reply('Bitte jemanden erwähnen: !warn @user Grund');
+    if (!target) return message.reply('Bitte jemanden erwaehnen: !warn @user Grund');
     message.reply(`${target.user.tag} wurde verwarnt. Grund: ${reason}`);
   }
 
   if (cmd === '!mute') {
     if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
-      return message.reply('Keine Berechtigung.
+      return message.reply('Keine Berechtigung.');
+    }
+    const target = message.mentions.members.first();
+    if (!target) return message.reply('Bitte jemanden erwaehnen: !mute @user');
+    await target.timeout(10 * 60 * 1000, 'Gemutet per Command');
+    message.reply(`${target.user.tag} wurde fuer 10 Minuten gemutet.`);
+  }
+});
+
+client.login(process.env.DISCORD_TOKEN);
