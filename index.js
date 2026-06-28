@@ -5,6 +5,9 @@ const {
   ChannelType,
   REST,
   Routes,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } = require('discord.js');
 
 const client = new Client({
@@ -107,6 +110,13 @@ const slashCommands = [
       sprachWahl,
     ],
   },
+  {
+    name: 'ticketpanel',
+    description: 'Postet einen Button zum Oeffnen von Tickets',
+    options: [
+      sprachWahl,
+    ],
+  },
 ];
 
 async function befehleRegistrieren() {
@@ -187,6 +197,7 @@ const texte = {
     kategorien: {
       willkommen: '👋 Willkommen',
       bewerbung: '📝 Bewerbung',
+      tickets: '🎫 Tickets',
     },
     channels: {
       welcome: '👋 welcome',
@@ -218,6 +229,15 @@ const texte = {
     logUnban: (mod, id) => `🔓 **Unban**\nVon: ${mod}\nUser-ID: ${id}`,
     logUntimeout: (mod, user) => `🔊 **Untimeout**\nVon: ${mod}\nNutzer: ${user}`,
     logPurge: (mod, n, kanal) => `🧹 **Purge**\nVon: ${mod}\nAnzahl: ${n}\nChannel: ${kanal}`,
+    ticketPanelText: '🎫 **Support / Bewerbung**\n\nKlicke auf den Button unten, um ein privates Ticket zu oeffnen.',
+    ticketButtonLabel: 'Ticket oeffnen',
+    ticketCloseLabel: 'Ticket schliessen',
+    ticketPanelGepostet: 'Ticket-Panel wurde gepostet.',
+    ticketBegruessung: (user) => `🎫 Hallo ${user}, danke fuer dein Ticket! Ein Teammitglied wird sich bald melden.`,
+    ticketSchliessenInfo: (user) => `🔒 Dieses Ticket wird von ${user} geschlossen...`,
+    ticketBereitsOffen: 'Du hast bereits ein offenes Ticket.',
+    logTicketErstellt: (user) => `🎫 **Ticket erstellt**\nVon: ${user}`,
+    logTicketGeschlossen: (mod) => `🔒 **Ticket geschlossen**\nVon: ${mod}`,
   },
   en: {
     nurAdmins: 'Only admins can use this.',
@@ -240,6 +260,7 @@ const texte = {
     kategorien: {
       willkommen: '👋 Welcome',
       bewerbung: '📝 Applications',
+      tickets: '🎫 Tickets',
     },
     channels: {
       welcome: '👋 welcome',
@@ -271,6 +292,15 @@ const texte = {
     logUnban: (mod, id) => `🔓 **Unban**\nBy: ${mod}\nUser ID: ${id}`,
     logUntimeout: (mod, user) => `🔊 **Untimeout**\nBy: ${mod}\nUser: ${user}`,
     logPurge: (mod, n, kanal) => `🧹 **Purge**\nBy: ${mod}\nCount: ${n}\nChannel: ${kanal}`,
+    ticketPanelText: '🎫 **Support / Application**\n\nClick the button below to open a private ticket.',
+    ticketButtonLabel: 'Open ticket',
+    ticketCloseLabel: 'Close ticket',
+    ticketPanelGepostet: 'Ticket panel was posted.',
+    ticketBegruessung: (user) => `🎫 Hello ${user}, thanks for your ticket! A team member will be with you shortly.`,
+    ticketSchliessenInfo: (user) => `🔒 This ticket is being closed by ${user}...`,
+    ticketBereitsOffen: 'You already have an open ticket.',
+    logTicketErstellt: (user) => `🎫 **Ticket created**\nBy: ${user}`,
+    logTicketGeschlossen: (mod) => `🔒 **Ticket closed**\nBy: ${mod}`,
   },
 };
 
@@ -651,6 +681,104 @@ client.on('interactionCreate', async (interaction) => {
       await logSenden(interaction.guild, t.channels.modlog, t.logPurge(interaction.user.tag, geloescht.size, interaction.channel.name));
     }
     await interaction.editReply(t.purgeFertig(geloescht.size));
+  }
+
+  // ---------- /ticketpanel ----------
+  if (commandName === 'ticketpanel') {
+    if (!istAdminOderHoeher(interaction.member, t)) {
+      return interaction.reply({ content: t.keineBerechtigung, ephemeral: true });
+    }
+
+    const button = new ButtonBuilder()
+      .setCustomId(`ticket_open_${sprache}`)
+      .setLabel(t.ticketButtonLabel)
+      .setEmoji('🎫')
+      .setStyle(ButtonStyle.Primary);
+
+    const row = new ActionRowBuilder().addComponents(button);
+
+    await interaction.channel.send({ content: t.ticketPanelText, components: [row] });
+    await interaction.reply({ content: t.ticketPanelGepostet, ephemeral: true });
+  }
+});
+
+// ---------- BUTTON-INTERAKTIONEN (Tickets) ----------
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isButton()) return;
+
+  // Ticket oeffnen
+  if (interaction.customId.startsWith('ticket_open_')) {
+    const sprache = interaction.customId.replace('ticket_open_', '') || 'de';
+    const t = texte[sprache] || texte.de;
+    const guild = interaction.guild;
+
+    // Pruefen ob der User schon ein offenes Ticket hat
+    const ticketName = `ticket-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    const existiertSchon = guild.channels.cache.find(c => c.name === ticketName);
+    if (existiertSchon) {
+      return interaction.reply({ content: t.ticketBereitsOffen, ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    // Ticket-Kategorie finden oder erstellen
+    let ticketKategorie = guild.channels.cache.find(c => c.name === t.kategorien.tickets && c.type === ChannelType.GuildCategory);
+    if (!ticketKategorie) {
+      ticketKategorie = await guild.channels.create({
+        name: t.kategorien.tickets,
+        type: ChannelType.GuildCategory,
+      });
+    }
+
+    const modRole = guild.roles.cache.find(r => r.name === t.rollen.mod);
+    const adminRole = guild.roles.cache.find(r => r.name === t.rollen.admin);
+    const headAdminRole = guild.roles.cache.find(r => r.name === t.rollen.headadmin);
+    const ownerRole = guild.roles.cache.find(r => r.name === t.rollen.owner);
+
+    const overwrites = [
+      { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+      { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+    ];
+    if (modRole) overwrites.push({ id: modRole.id, allow: [PermissionsBitField.Flags.ViewChannel] });
+    if (adminRole) overwrites.push({ id: adminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] });
+    if (headAdminRole) overwrites.push({ id: headAdminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] });
+    if (ownerRole) overwrites.push({ id: ownerRole.id, allow: [PermissionsBitField.Flags.ViewChannel] });
+
+    const ticketChannel = await guild.channels.create({
+      name: ticketName,
+      type: ChannelType.GuildText,
+      parent: ticketKategorie.id,
+      permissionOverwrites: overwrites,
+    });
+
+    const closeButton = new ButtonBuilder()
+      .setCustomId(`ticket_close_${sprache}`)
+      .setLabel(t.ticketCloseLabel)
+      .setEmoji('🔒')
+      .setStyle(ButtonStyle.Danger);
+    const closeRow = new ActionRowBuilder().addComponents(closeButton);
+
+    await ticketChannel.send({ content: t.ticketBegruessung(`<@${interaction.user.id}>`), components: [closeRow] });
+    await logSenden(guild, t.channels.modlog, t.logTicketErstellt(interaction.user.tag));
+
+    await interaction.editReply({ content: `${t.ticketButtonLabel}: ${ticketChannel}` });
+  }
+
+  // Ticket schliessen
+  if (interaction.customId.startsWith('ticket_close_')) {
+    const sprache = interaction.customId.replace('ticket_close_', '') || 'de';
+    const t = texte[sprache] || texte.de;
+
+    await interaction.reply(t.ticketSchliessenInfo(interaction.user.tag));
+    await logSenden(interaction.guild, t.channels.modlog, t.logTicketGeschlossen(interaction.user.tag));
+
+    setTimeout(async () => {
+      try {
+        await interaction.channel.delete();
+      } catch (err) {
+        console.error('Konnte Ticket-Channel nicht loeschen:', err.message);
+      }
+    }, 3000);
   }
 });
 
