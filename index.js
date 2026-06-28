@@ -344,9 +344,88 @@ function darfSetupOderReset(member, guild, t) {
   return istOwner(member, t);
 }
 
+// ---------- AUTO-MOD ----------
+
+// Bekannte Scam-Domain-Muster (Discord Nitro Fakes, Steam-Phishing, etc.)
+const scamMuster = [
+  /discord-?nitro/i,
+  /discord-?gift/i,
+  /steam-?community-?gift/i,
+  /steamcommunlty/i,
+  /steampowered-?gift/i,
+  /dlscord/i,
+  /dlscordapp/i,
+  /discordapp-?gift/i,
+  /steamcomrnunity/i,
+  /steam-?gift\./i,
+  /free-?nitro/i,
+];
+
+function enthaeltScamLink(text) {
+  return scamMuster.some(muster => muster.test(text));
+}
+
+// Merkt sich die letzten Nachrichten pro User, um Spam zu erkennen
+const nachrichtenVerlauf = new Map();
+
+function istSpam(userId, inhalt) {
+  const jetzt = Date.now();
+  const verlauf = nachrichtenVerlauf.get(userId) || [];
+
+  // Alte Eintraege (aelter als 6 Sekunden) entfernen
+  const aktuell = verlauf.filter(eintrag => jetzt - eintrag.zeit < 6000);
+  aktuell.push({ zeit: jetzt, inhalt });
+  nachrichtenVerlauf.set(userId, aktuell);
+
+  // Spam-Fall 1: 5 oder mehr Nachrichten in 6 Sekunden
+  if (aktuell.length >= 5) return true;
+
+  // Spam-Fall 2: 3 gleiche/aehnliche Nachrichten hintereinander
+  const letzteDrei = aktuell.slice(-3);
+  if (letzteDrei.length === 3 && letzteDrei.every(e => e.inhalt === letzteDrei[0].inhalt)) {
+    return true;
+  }
+
+  return false;
+}
+
 client.once('ready', async () => {
   console.log(`Bot ist online als ${client.user.tag}`);
   await befehleRegistrieren();
+});
+
+client.on('messageCreate', async (message) => {
+  if (message.author.bot || !message.guild) return;
+
+  const sprache = 'de';
+  const t = texte[sprache];
+
+  // Admin/Owner/Mod sind von Auto-Mod ausgenommen
+  const istAusgenommen = message.member && (
+    istAdminOderHoeher(message.member, t) ||
+    message.member.roles.cache.some(r => r.name === t.rollen.mod)
+  );
+  if (istAusgenommen) return;
+
+  const scamGefunden = enthaeltScamLink(message.content);
+  const spamGefunden = istSpam(message.author.id, message.content);
+
+  if (scamGefunden || spamGefunden) {
+    try {
+      await message.delete();
+    } catch (err) {
+      console.error('Konnte Spam/Scam-Nachricht nicht loeschen:', err.message);
+    }
+
+    try {
+      await message.member.timeout(5 * 60 * 1000, scamGefunden ? 'Scam-Link erkannt' : 'Spam erkannt');
+    } catch (err) {
+      console.error('Konnte Nutzer nicht automatisch timeouten:', err.message);
+    }
+
+    const grund = scamGefunden ? '🚨 Scam-Link erkannt' : '🚨 Spam erkannt';
+    await logSenden(message.guild, t.channels.modlog, `${grund}\nNutzer: ${message.author.tag}\nNachricht geloescht, 5 Min Timeout vergeben.`);
+  }
 });
 
 client.on('interactionCreate', async (interaction) => {
