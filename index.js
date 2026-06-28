@@ -91,6 +91,11 @@ async function befehleRegistrieren() {
     const clientId = process.env.CLIENT_ID;
     const guildId = process.env.GUILD_ID;
 
+    // Zuerst IMMER die globalen Befehle leeren, damit es keine Duplikate gibt
+    // (falls vorher mal ohne GUILD_ID gestartet wurde)
+    await rest.put(Routes.applicationCommands(clientId), { body: [] });
+    console.log('Alte globale Befehle wurden entfernt.');
+
     if (guildId) {
       await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: slashCommands });
       console.log('Slash-Befehle wurden registriert (fuer diesen Server).');
