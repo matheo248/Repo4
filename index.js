@@ -91,17 +91,26 @@ async function befehleRegistrieren() {
     const clientId = process.env.CLIENT_ID;
     const guildId = process.env.GUILD_ID;
 
-    // Zuerst IMMER die globalen Befehle leeren, damit es keine Duplikate gibt
-    // (falls vorher mal ohne GUILD_ID gestartet wurde)
-    await rest.put(Routes.applicationCommands(clientId), { body: [] });
-    console.log('Alte globale Befehle wurden entfernt.');
+    console.log('CLIENT_ID ist:', clientId);
+    console.log('GUILD_ID ist:', guildId);
 
+    // Schritt 1: GLOBALE Befehle komplett leeren
+    await rest.put(Routes.applicationCommands(clientId), { body: [] });
+    console.log('Schritt 1: Globale Befehle wurden geleert.');
+
+    // Schritt 2: Falls GUILD_ID gesetzt ist, auch dort erst leeren
+    if (guildId) {
+      await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
+      console.log('Schritt 2: Server-Befehle wurden geleert.');
+    }
+
+    // Schritt 3: Neu registrieren, NUR an einer Stelle
     if (guildId) {
       await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: slashCommands });
-      console.log('Slash-Befehle wurden registriert (fuer diesen Server).');
+      console.log('Schritt 3: Slash-Befehle wurden NEU registriert (nur fuer diesen Server).');
     } else {
       await rest.put(Routes.applicationCommands(clientId), { body: slashCommands });
-      console.log('Slash-Befehle wurden global registriert (kann etwas dauern, bis sichtbar).');
+      console.log('Schritt 3: Slash-Befehle wurden NEU registriert (global).');
     }
   } catch (error) {
     console.error('Fehler beim Registrieren der Befehle:', error);
@@ -167,6 +176,8 @@ const texte = {
       voice: '🔊 voice-chat',
     },
     keinGrund: 'Kein Grund angegeben',
+    regelnText: '📋 **Serverregeln**\n\n1. Sei respektvoll zu allen Mitgliedern.\n2. Kein Spam, keine Werbung.\n3. Keine NSFW-Inhalte.\n4. Keine Beleidigungen oder Hassrede.\n5. Halte dich an die Discord-Richtlinien.\n6. Anweisungen vom Team sind zu befolgen.\n\nVerstoesse koennen zu Verwarnung, Timeout, Kick oder Bann fuehren.',
+    willkommenText: (servername) => `👋 **Willkommen auf ${servername}!**\n\nSchoen, dass du da bist. Lies dir bitte zuerst die Regeln durch und bewirb dich anschliessend im Apply-Channel, um vollen Zugriff zu erhalten.\n\nViel Spass auf dem Server!`,
   },
   en: {
     nurAdmins: 'Only admins can use this.',
@@ -202,6 +213,8 @@ const texte = {
       voice: '🔊 voice-chat',
     },
     keinGrund: 'No reason given',
+    regelnText: '📋 **Server Rules**\n\n1. Be respectful to all members.\n2. No spam, no advertising.\n3. No NSFW content.\n4. No insults or hate speech.\n5. Follow the Discord Terms of Service.\n6. Follow staff instructions.\n\nViolations may lead to warning, timeout, kick or ban.',
+    willkommenText: (servername) => `👋 **Welcome to ${servername}!**\n\nGlad to have you here. Please read the rules first and then apply in the apply channel to get full access.\n\nHave fun on the server!`,
   },
 };
 
@@ -223,11 +236,11 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     const kategorieName = interaction.options.getString('kategoriename') || (sprache === 'de' ? 'Mein Server' : 'My Server');
-    const ownerFarbe = farbeAufloesen(interaction.options.getString('ownerfarbe'), '#d4af37');
-    const headAdminFarbe = farbeAufloesen(interaction.options.getString('headadminfarbe'), '#e74c3c');
-    const adminFarbe = farbeAufloesen(interaction.options.getString('adminfarbe'), '#ff0000');
-    const modFarbe = farbeAufloesen(interaction.options.getString('modfarbe'), '#0000ff');
-    const memberFarbe = farbeAufloesen(interaction.options.getString('memberfarbe'), '#00ff00');
+    const ownerFarbe = farbeAufloesen(interaction.options.getString('ownerfarbe'), '#2A1048');
+    const headAdminFarbe = farbeAufloesen(interaction.options.getString('headadminfarbe'), '#3A136B');
+    const adminFarbe = farbeAufloesen(interaction.options.getString('adminfarbe'), '#4C1D95');
+    const modFarbe = farbeAufloesen(interaction.options.getString('modfarbe'), '#6E2BFF');
+    const memberFarbe = farbeAufloesen(interaction.options.getString('memberfarbe'), '#8B5CFF');
 
     await interaction.deferReply();
 
@@ -283,7 +296,7 @@ client.on('interactionCreate', async (interaction) => {
       type: ChannelType.GuildCategory,
     });
 
-    await guild.channels.create({
+    const welcomeChannel = await guild.channels.create({
       name: t.channels.welcome,
       type: ChannelType.GuildText,
       parent: willkommenKategorie.id,
@@ -291,8 +304,9 @@ client.on('interactionCreate', async (interaction) => {
         { id: guild.roles.everyone.id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] },
       ],
     });
+    await welcomeChannel.send(t.willkommenText(guild.name));
 
-    await guild.channels.create({
+    const rulesChannel = await guild.channels.create({
       name: t.channels.rules,
       type: ChannelType.GuildText,
       parent: willkommenKategorie.id,
@@ -300,6 +314,7 @@ client.on('interactionCreate', async (interaction) => {
         { id: guild.roles.everyone.id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] },
       ],
     });
+    await rulesChannel.send(t.regelnText);
 
     // Kategorie 2: Bewerbung (eigene Kategorie, oeffentlich)
     const bewerbungKategorie = await guild.channels.create({
