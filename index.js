@@ -146,13 +146,20 @@ const texte = {
       mod: 'Moderator',
       member: 'Member',
     },
+    kategorien: {
+      willkommen: '👋 Willkommen',
+      bewerbung: '📝 Bewerbung',
+    },
     channels: {
+      welcome: '👋 welcome',
+      rules: '📋 rules',
+      apply: '📝 apply',
       admin: '🔒 admin',
       chat: '💬 chat',
       map: '🗺️ map',
       base: '🏠 base',
       team: '👥 team',
-      apply: '📝 apply',
+      voice: '🔊 voice-chat',
     },
     keinGrund: 'Kein Grund angegeben',
   },
@@ -174,13 +181,20 @@ const texte = {
       mod: 'Moderator',
       member: 'Member',
     },
+    kategorien: {
+      willkommen: '👋 Welcome',
+      bewerbung: '📝 Applications',
+    },
     channels: {
+      welcome: '👋 welcome',
+      rules: '📋 rules',
+      apply: '📝 apply',
       admin: '🔒 admin',
       chat: '💬 chat',
       map: '🗺️ map',
       base: '🏠 base',
       team: '👥 team',
-      apply: '📝 apply',
+      voice: '🔊 voice-chat',
     },
     keinGrund: 'No reason given',
   },
@@ -258,7 +272,46 @@ client.on('interactionCreate', async (interaction) => {
         permissions: [PermissionsBitField.Flags.Administrator],
       });
 
-    // Kategorie
+    // Kategorie 1: Willkommen (oeffentlich, fuer jeden sichtbar)
+    const willkommenKategorie = await guild.channels.create({
+      name: t.kategorien.willkommen,
+      type: ChannelType.GuildCategory,
+    });
+
+    await guild.channels.create({
+      name: t.channels.welcome,
+      type: ChannelType.GuildText,
+      parent: willkommenKategorie.id,
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] },
+      ],
+    });
+
+    await guild.channels.create({
+      name: t.channels.rules,
+      type: ChannelType.GuildText,
+      parent: willkommenKategorie.id,
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] },
+      ],
+    });
+
+    // Kategorie 2: Bewerbung (eigene Kategorie, oeffentlich)
+    const bewerbungKategorie = await guild.channels.create({
+      name: t.kategorien.bewerbung,
+      type: ChannelType.GuildCategory,
+    });
+
+    await guild.channels.create({
+      name: t.channels.apply,
+      type: ChannelType.GuildText,
+      parent: bewerbungKategorie.id,
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+      ],
+    });
+
+    // Kategorie 3: Hauptkategorie
     const category = await guild.channels.create({
       name: kategorieName,
       type: ChannelType.GuildCategory,
@@ -277,10 +330,8 @@ client.on('interactionCreate', async (interaction) => {
       ],
     });
 
-    // Channels fuer Member und alle drueber (jeder sieht diese, da @everyone Zugriff hat,
-    // sobald man die Member Rolle oder hoeher hat -- hier vereinfacht ueber @everyone erlaubt,
-    // da neue Server-Mitglieder sowieso erst die Member Rolle bekommen sollten)
-    const memberChannels = [t.channels.chat, t.channels.map, t.channels.base, t.channels.team, t.channels.apply];
+    // Channels fuer Member und alle drueber
+    const memberChannels = [t.channels.chat, t.channels.map, t.channels.base, t.channels.team];
 
     for (const name of memberChannels) {
       await guild.channels.create({
@@ -297,6 +348,21 @@ client.on('interactionCreate', async (interaction) => {
         ],
       });
     }
+
+    // Voice-Channel fuer Member und alle drueber
+    await guild.channels.create({
+      name: t.channels.voice,
+      type: ChannelType.GuildVoice,
+      parent: category.id,
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+        { id: memberRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+        { id: modRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+        { id: adminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+        { id: headAdminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+        { id: ownerRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+      ],
+    });
 
     await interaction.editReply(t.setupFertig(kategorieName));
   }
