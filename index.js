@@ -32,13 +32,12 @@ const slashCommands = [
   sprachOption(
     new SlashCommandBuilder()
       .setName('setup')
-      .setDescription('Erstellt Rollen und Channels / Creates roles and channels')
-      .addStringOption(opt => opt.setName('kategoriename').setDescription('Name der Kategorie / Category name'))
-      .addStringOption(opt => opt.setName('adminfarbe').setDescription('Farbe fuer Admin-Rolle: Name oder Hexcode (z.B. rot oder #ff0000)'))
-      .addStringOption(opt => opt.setName('modfarbe').setDescription('Farbe fuer Moderator-Rolle: Name oder Hexcode'))
-      .addStringOption(opt => opt.setName('memberfarbe').setDescription('Farbe fuer Mitglied-Rolle: Name oder Hexcode'))
+      .setDescription('Erstellt Rollen und Channels (DE/EN)')
+      .addStringOption(opt => opt.setName('kategoriename').setDescription('Name der Kategorie'))
+      .addStringOption(opt => opt.setName('adminfarbe').setDescription('Farbe fuer Admin Rolle, Name oder Hexcode'))
+      .addStringOption(opt => opt.setName('modfarbe').setDescription('Farbe fuer Moderator Rolle, Name oder Hexcode'))
+      .addStringOption(opt => opt.setName('memberfarbe').setDescription('Farbe fuer Mitglied Rolle, Name oder Hexcode'))
   ),
   sprachOption(
     new SlashCommandBuilder()
       .setName('kick')
-      .setDescription('Kickt einen Nutzer / Kicks
