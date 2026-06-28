@@ -16,6 +16,7 @@ const client = new Client({
   ],
 });
 
+// ---------- SLASH-COMMANDS ----------
 const sprachWahl = {
   name: 'sprache',
   description: 'Sprache / Language',
@@ -33,9 +34,19 @@ const slashCommands = [
     description: 'Erstellt Rollen und Channels',
     options: [
       { name: 'kategoriename', description: 'Name der Kategorie', type: 3, required: false },
+      { name: 'ownerfarbe', description: 'Farbe Owner Rolle, Name oder Hexcode', type: 3, required: false },
+      { name: 'headadminfarbe', description: 'Farbe Head Admin Rolle, Name oder Hexcode', type: 3, required: false },
       { name: 'adminfarbe', description: 'Farbe Admin Rolle, Name oder Hexcode', type: 3, required: false },
       { name: 'modfarbe', description: 'Farbe Moderator Rolle, Name oder Hexcode', type: 3, required: false },
       { name: 'memberfarbe', description: 'Farbe Mitglied Rolle, Name oder Hexcode', type: 3, required: false },
+      sprachWahl,
+    ],
+  },
+  {
+    name: 'reset',
+    description: 'Loescht ALLE Channels und Kategorien (nicht den Server selbst)',
+    options: [
+      { name: 'bestaetigen', description: 'Schreibe JA um wirklich alles zu loeschen', type: 3, required: true },
       sprachWahl,
     ],
   },
@@ -92,6 +103,7 @@ async function befehleRegistrieren() {
   }
 }
 
+// ---------- FARBEN ----------
 const farbNamen = {
   rot: '#ff0000', red: '#ff0000',
   blau: '#0000ff', blue: '#0000ff',
@@ -102,6 +114,7 @@ const farbNamen = {
   lila: '#800080', purple: '#800080',
   weiss: '#ffffff', white: '#ffffff',
   schwarz: '#2c2f33', black: '#2c2f33',
+  gold: '#d4af37',
 };
 
 function farbeAufloesen(input, fallbackHex) {
@@ -113,9 +126,10 @@ function farbeAufloesen(input, fallbackHex) {
   return farbNamen[wert] || fallbackHex;
 }
 
+// ---------- TEXTE ----------
 const texte = {
   de: {
-    nurAdmins: 'Nur Admins duerfen /setup benutzen.',
+    nurAdmins: 'Nur Admins duerfen das benutzen.',
     keineBerechtigung: 'Du hast keine Berechtigung dafuer.',
     bitteErwaehnenKick: 'Bitte jemanden angeben.',
     gekickt: (u) => `${u} wurde gekickt.`,
@@ -123,12 +137,27 @@ const texte = {
     verwarnt: (u, g) => `${u} wurde verwarnt. Grund: ${g}`,
     gemutet: (u) => `${u} wurde fuer 10 Minuten gemutet.`,
     setupFertig: (kat) => `Setup fertig! Kategorie "${kat}" mit Rollen und Channels wurde erstellt.`,
-    rollen: { admin: 'Admin', mod: 'Moderator', member: 'Mitglied' },
-    channels: { allgemein: 'allgemein', regeln: 'regeln', modlog: 'mod-log', voice: 'voice-chat' },
+    resetAbgebrochen: 'Reset abgebrochen. Schreibe JA bei bestaetigen, um wirklich alles zu loeschen.',
+    resetFertig: 'Alle Channels und Kategorien wurden geloescht. Benutze /setup um neu zu starten.',
+    rollen: {
+      owner: 'Owner',
+      headadmin: 'Head Admin',
+      admin: 'Admin',
+      mod: 'Moderator',
+      member: 'Member',
+    },
+    channels: {
+      admin: '🔒 admin',
+      chat: '💬 chat',
+      map: '🗺️ map',
+      base: '🏠 base',
+      team: '👥 team',
+      apply: '📝 apply',
+    },
     keinGrund: 'Kein Grund angegeben',
   },
   en: {
-    nurAdmins: 'Only admins can use /setup.',
+    nurAdmins: 'Only admins can use this.',
     keineBerechtigung: "You don't have permission for that.",
     bitteErwaehnenKick: 'Please specify a user.',
     gekickt: (u) => `${u} was kicked.`,
@@ -136,8 +165,23 @@ const texte = {
     verwarnt: (u, g) => `${u} was warned. Reason: ${g}`,
     gemutet: (u) => `${u} was muted for 10 minutes.`,
     setupFertig: (kat) => `Setup complete! Category "${kat}" with roles and channels was created.`,
-    rollen: { admin: 'Admin', mod: 'Moderator', member: 'Member' },
-    channels: { allgemein: 'general', regeln: 'rules', modlog: 'mod-log', voice: 'voice-chat' },
+    resetAbgebrochen: 'Reset cancelled. Type JA in bestaetigen to really delete everything.',
+    resetFertig: 'All channels and categories were deleted. Use /setup to start again.',
+    rollen: {
+      owner: 'Owner',
+      headadmin: 'Head Admin',
+      admin: 'Admin',
+      mod: 'Moderator',
+      member: 'Member',
+    },
+    channels: {
+      admin: '🔒 admin',
+      chat: '💬 chat',
+      map: '🗺️ map',
+      base: '🏠 base',
+      team: '👥 team',
+      apply: '📝 apply',
+    },
     keinGrund: 'No reason given',
   },
 };
@@ -150,17 +194,18 @@ client.once('ready', async () => {
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
   const { commandName } = interaction;
+  const sprache = interaction.options.getString('sprache') || 'de';
+  const t = texte[sprache];
 
+  // ---------- /setup ----------
   if (commandName === 'setup') {
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      const sprache = interaction.options.getString('sprache') || 'de';
-      return interaction.reply({ content: texte[sprache].nurAdmins, ephemeral: true });
+      return interaction.reply({ content: t.nurAdmins, ephemeral: true });
     }
 
-    const sprache = interaction.options.getString('sprache') || 'de';
-    const t = texte[sprache];
-
     const kategorieName = interaction.options.getString('kategoriename') || (sprache === 'de' ? 'Mein Server' : 'My Server');
+    const ownerFarbe = farbeAufloesen(interaction.options.getString('ownerfarbe'), '#d4af37');
+    const headAdminFarbe = farbeAufloesen(interaction.options.getString('headadminfarbe'), '#e74c3c');
     const adminFarbe = farbeAufloesen(interaction.options.getString('adminfarbe'), '#ff0000');
     const modFarbe = farbeAufloesen(interaction.options.getString('modfarbe'), '#0000ff');
     const memberFarbe = farbeAufloesen(interaction.options.getString('memberfarbe'), '#00ff00');
@@ -169,8 +214,9 @@ client.on('interactionCreate', async (interaction) => {
 
     const guild = interaction.guild;
 
-    const adminRole = guild.roles.cache.find(r => r.name === t.rollen.admin) ||
-      await guild.roles.create({ name: t.rollen.admin, color: adminFarbe, permissions: [PermissionsBitField.Flags.Administrator] });
+    // Rollen erstellen (Reihenfolge wichtig fuer Rang/Hierarchie: zuerst niedrigste, dann hoechste, da Discord neue Rollen oben einreiht)
+    const memberRole = guild.roles.cache.find(r => r.name === t.rollen.member) ||
+      await guild.roles.create({ name: t.rollen.member, color: memberFarbe });
 
     const modRole = guild.roles.cache.find(r => r.name === t.rollen.mod) ||
       await guild.roles.create({
@@ -184,52 +230,106 @@ client.on('interactionCreate', async (interaction) => {
         ],
       });
 
-    const memberRole = guild.roles.cache.find(r => r.name === t.rollen.member) ||
-      await guild.roles.create({ name: t.rollen.member, color: memberFarbe });
+    const adminRole = guild.roles.cache.find(r => r.name === t.rollen.admin) ||
+      await guild.roles.create({
+        name: t.rollen.admin,
+        color: adminFarbe,
+        permissions: [
+          PermissionsBitField.Flags.KickMembers,
+          PermissionsBitField.Flags.BanMembers,
+          PermissionsBitField.Flags.ManageMessages,
+          PermissionsBitField.Flags.ModerateMembers,
+          PermissionsBitField.Flags.ManageChannels,
+          PermissionsBitField.Flags.ManageRoles,
+        ],
+      });
 
+    const headAdminRole = guild.roles.cache.find(r => r.name === t.rollen.headadmin) ||
+      await guild.roles.create({
+        name: t.rollen.headadmin,
+        color: headAdminFarbe,
+        permissions: [PermissionsBitField.Flags.Administrator],
+      });
+
+    const ownerRole = guild.roles.cache.find(r => r.name === t.rollen.owner) ||
+      await guild.roles.create({
+        name: t.rollen.owner,
+        color: ownerFarbe,
+        permissions: [PermissionsBitField.Flags.Administrator],
+      });
+
+    // Kategorie
     const category = await guild.channels.create({
       name: kategorieName,
       type: ChannelType.GuildCategory,
     });
 
+    // Admin-Channel: nur Admin, Head Admin, Owner sehen ihn
     await guild.channels.create({
-      name: t.channels.allgemein,
-      type: ChannelType.GuildText,
-      parent: category.id,
-    });
-
-    await guild.channels.create({
-      name: t.channels.regeln,
-      type: ChannelType.GuildText,
-      parent: category.id,
-      permissionOverwrites: [
-        { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.SendMessages] },
-      ],
-    });
-
-    await guild.channels.create({
-      name: t.channels.modlog,
+      name: t.channels.admin,
       type: ChannelType.GuildText,
       parent: category.id,
       permissionOverwrites: [
         { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        { id: modRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
         { id: adminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+        { id: headAdminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+        { id: ownerRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
       ],
     });
 
-    await guild.channels.create({
-      name: t.channels.voice,
-      type: ChannelType.GuildVoice,
-      parent: category.id,
-    });
+    // Channels fuer Member und alle drueber (jeder sieht diese, da @everyone Zugriff hat,
+    // sobald man die Member Rolle oder hoeher hat -- hier vereinfacht ueber @everyone erlaubt,
+    // da neue Server-Mitglieder sowieso erst die Member Rolle bekommen sollten)
+    const memberChannels = [t.channels.chat, t.channels.map, t.channels.base, t.channels.team, t.channels.apply];
+
+    for (const name of memberChannels) {
+      await guild.channels.create({
+        name,
+        type: ChannelType.GuildText,
+        parent: category.id,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: memberRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+          { id: modRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+          { id: adminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+          { id: headAdminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+          { id: ownerRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+        ],
+      });
+    }
 
     await interaction.editReply(t.setupFertig(kategorieName));
   }
 
+  // ---------- /reset ----------
+  if (commandName === 'reset') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return interaction.reply({ content: t.nurAdmins, ephemeral: true });
+    }
+
+    const bestaetigung = interaction.options.getString('bestaetigen');
+    if (bestaetigung.trim().toUpperCase() !== 'JA' && bestaetigung.trim().toUpperCase() !== 'YES') {
+      return interaction.reply({ content: t.resetAbgebrochen, ephemeral: true });
+    }
+
+    await interaction.deferReply();
+
+    const guild = interaction.guild;
+    const alleChannels = await guild.channels.fetch();
+
+    for (const channel of alleChannels.values()) {
+      try {
+        await channel.delete();
+      } catch (err) {
+        console.error(`Konnte Channel nicht loeschen: ${channel.name}`, err.message);
+      }
+    }
+
+    await interaction.editReply(t.resetFertig);
+  }
+
+  // ---------- /kick ----------
   if (commandName === 'kick') {
-    const sprache = interaction.options.getString('sprache') || 'de';
-    const t = texte[sprache];
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.KickMembers)) {
       return interaction.reply({ content: t.keineBerechtigung, ephemeral: true });
     }
@@ -239,9 +339,8 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply(t.gekickt(target.user.tag));
   }
 
+  // ---------- /ban ----------
   if (commandName === 'ban') {
-    const sprache = interaction.options.getString('sprache') || 'de';
-    const t = texte[sprache];
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
       return interaction.reply({ content: t.keineBerechtigung, ephemeral: true });
     }
@@ -251,9 +350,8 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply(t.gebannt(target.user.tag));
   }
 
+  // ---------- /warn ----------
   if (commandName === 'warn') {
-    const sprache = interaction.options.getString('sprache') || 'de';
-    const t = texte[sprache];
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
       return interaction.reply({ content: t.keineBerechtigung, ephemeral: true });
     }
@@ -263,9 +361,8 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply(t.verwarnt(target.user.tag, grund));
   }
 
+  // ---------- /mute ----------
   if (commandName === 'mute') {
-    const sprache = interaction.options.getString('sprache') || 'de';
-    const t = texte[sprache];
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
       return interaction.reply({ content: t.keineBerechtigung, ephemeral: true });
     }
