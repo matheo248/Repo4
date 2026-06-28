@@ -117,6 +117,24 @@ const slashCommands = [
       sprachWahl,
     ],
   },
+  {
+    name: 'rolegive',
+    description: 'Vergibt eine Rolle an einen Nutzer',
+    options: [
+      { name: 'user', description: 'Wer soll die Rolle bekommen', type: 6, required: true },
+      { name: 'rolle', description: 'Welche Rolle', type: 8, required: true },
+      sprachWahl,
+    ],
+  },
+  {
+    name: 'roleremove',
+    description: 'Entfernt eine Rolle von einem Nutzer',
+    options: [
+      { name: 'user', description: 'Wem die Rolle entfernen', type: 6, required: true },
+      { name: 'rolle', description: 'Welche Rolle', type: 8, required: true },
+      sprachWahl,
+    ],
+  },
 ];
 
 async function befehleRegistrieren() {
@@ -238,6 +256,13 @@ const texte = {
     ticketBereitsOffen: 'Du hast bereits ein offenes Ticket.',
     logTicketErstellt: (user) => `🎫 **Ticket erstellt**\nVon: ${user}`,
     logTicketGeschlossen: (mod) => `🔒 **Ticket geschlossen**\nVon: ${mod}`,
+    rolleVergeben: (u, r) => `${u} hat jetzt die Rolle ${r}.`,
+    rolleEntfernt: (u, r) => `${u} hat die Rolle ${r} nicht mehr.`,
+    rolleHatSchon: (u, r) => `${u} hat die Rolle ${r} bereits.`,
+    rolleHatNicht: (u, r) => `${u} hat die Rolle ${r} nicht.`,
+    rolleZuHoch: 'Diese Rolle ist hoeher oder gleich deiner eigenen, das ist nicht erlaubt.',
+    logRoleGive: (mod, u, r) => `➕ **Rolle vergeben**\nVon: ${mod}\nNutzer: ${u}\nRolle: ${r}`,
+    logRoleRemove: (mod, u, r) => `➖ **Rolle entfernt**\nVon: ${mod}\nNutzer: ${u}\nRolle: ${r}`,
   },
   en: {
     nurAdmins: 'Only admins can use this.',
@@ -301,6 +326,13 @@ const texte = {
     ticketBereitsOffen: 'You already have an open ticket.',
     logTicketErstellt: (user) => `🎫 **Ticket created**\nBy: ${user}`,
     logTicketGeschlossen: (mod) => `🔒 **Ticket closed**\nBy: ${mod}`,
+    rolleVergeben: (u, r) => `${u} now has the role ${r}.`,
+    rolleEntfernt: (u, r) => `${u} no longer has the role ${r}.`,
+    rolleHatSchon: (u, r) => `${u} already has the role ${r}.`,
+    rolleHatNicht: (u, r) => `${u} doesn't have the role ${r}.`,
+    rolleZuHoch: 'This role is higher than or equal to your own, that is not allowed.',
+    logRoleGive: (mod, u, r) => `➕ **Role given**\nBy: ${mod}\nUser: ${u}\nRole: ${r}`,
+    logRoleRemove: (mod, u, r) => `➖ **Role removed**\nBy: ${mod}\nUser: ${u}\nRole: ${r}`,
   },
 };
 
@@ -778,6 +810,51 @@ client.on('interactionCreate', async (interaction) => {
 
     await interaction.channel.send({ content: t.ticketPanelText, components: [row] });
     await interaction.reply({ content: t.ticketPanelGepostet, ephemeral: true });
+  }
+
+  // ---------- /rolegive ----------
+  if (commandName === 'rolegive') {
+    if (!istAdminOderHoeher(interaction.member, t)) {
+      return interaction.reply({ content: t.keineBerechtigung, ephemeral: true });
+    }
+    const target = interaction.options.getMember('user');
+    const rolle = interaction.options.getRole('rolle');
+    if (!target || !rolle) return interaction.reply({ content: t.bitteErwaehnenKick, ephemeral: true });
+
+    // Sicherheitscheck: Rolle darf nicht hoeher oder gleich der eigenen hoechsten Rolle sein
+    if (rolle.position >= interaction.member.roles.highest.position) {
+      return interaction.reply({ content: t.rolleZuHoch, ephemeral: true });
+    }
+
+    if (target.roles.cache.has(rolle.id)) {
+      return interaction.reply({ content: t.rolleHatSchon(target.user.tag, rolle.name), ephemeral: true });
+    }
+
+    await target.roles.add(rolle);
+    await logSenden(interaction.guild, t.channels.adminlog, t.logRoleGive(interaction.user.tag, target.user.tag, rolle.name));
+    await interaction.reply(t.rolleVergeben(target.user.tag, rolle.name));
+  }
+
+  // ---------- /roleremove ----------
+  if (commandName === 'roleremove') {
+    if (!istAdminOderHoeher(interaction.member, t)) {
+      return interaction.reply({ content: t.keineBerechtigung, ephemeral: true });
+    }
+    const target = interaction.options.getMember('user');
+    const rolle = interaction.options.getRole('rolle');
+    if (!target || !rolle) return interaction.reply({ content: t.bitteErwaehnenKick, ephemeral: true });
+
+    if (rolle.position >= interaction.member.roles.highest.position) {
+      return interaction.reply({ content: t.rolleZuHoch, ephemeral: true });
+    }
+
+    if (!target.roles.cache.has(rolle.id)) {
+      return interaction.reply({ content: t.rolleHatNicht(target.user.tag, rolle.name), ephemeral: true });
+    }
+
+    await target.roles.remove(rolle);
+    await logSenden(interaction.guild, t.channels.adminlog, t.logRoleRemove(interaction.user.tag, target.user.tag, rolle.name));
+    await interaction.reply(t.rolleEntfernt(target.user.tag, rolle.name));
   }
 });
 
