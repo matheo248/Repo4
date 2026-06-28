@@ -152,7 +152,7 @@ const texte = {
     gemutet: (u) => `${u} wurde fuer 10 Minuten gemutet.`,
     setupFertig: (kat) => `Setup fertig! Kategorie "${kat}" mit Rollen und Channels wurde erstellt.`,
     resetAbgebrochen: 'Reset abgebrochen. Schreibe JA bei bestaetigen, um wirklich alles zu loeschen.',
-    resetFertig: 'Alle Channels und Kategorien wurden geloescht. Benutze /setup um neu zu starten.',
+    resetFertig: 'Alle Channels, Kategorien und Rollen wurden geloescht. Benutze /setup um neu zu starten.',
     rollen: {
       owner: 'Owner',
       headadmin: 'Head Admin',
@@ -189,7 +189,7 @@ const texte = {
     gemutet: (u) => `${u} was muted for 10 minutes.`,
     setupFertig: (kat) => `Setup complete! Category "${kat}" with roles and channels was created.`,
     resetAbgebrochen: 'Reset cancelled. Type JA in bestaetigen to really delete everything.',
-    resetFertig: 'All channels and categories were deleted. Use /setup to start again.',
+    resetFertig: 'All channels, categories and roles were deleted. Use /setup to start again.',
     rollen: {
       owner: 'Owner',
       headadmin: 'Head Admin',
@@ -401,13 +401,26 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.deferReply();
 
     const guild = interaction.guild;
-    const alleChannels = await guild.channels.fetch();
 
+    // Channels und Kategorien loeschen
+    const alleChannels = await guild.channels.fetch();
     for (const channel of alleChannels.values()) {
       try {
         await channel.delete();
       } catch (err) {
         console.error(`Konnte Channel nicht loeschen: ${channel.name}`, err.message);
+      }
+    }
+
+    // Rollen loeschen (ausser @everyone und der Bot-eigenen Rolle)
+    const alleRollen = await guild.roles.fetch();
+    for (const rolle of alleRollen.values()) {
+      if (rolle.name === '@everyone') continue;
+      if (rolle.managed) continue; // von Discord/Bots verwaltete Rollen ueberspringen
+      try {
+        await rolle.delete();
+      } catch (err) {
+        console.error(`Konnte Rolle nicht loeschen: ${rolle.name}`, err.message);
       }
     }
 
