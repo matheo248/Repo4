@@ -235,6 +235,8 @@ const texte = {
       lootruns: '🔧 loot-runs',
       wipeschedule: '📅 wipe-schedule',
       squadvoice: '🎙️ squad-voice',
+      beach: '🏖️ beach',
+      supply: '📦 supply',
     },
     keinGrund: 'Kein Grund angegeben',
     regelnText: '📋 **Serverregeln**\n\n1. Sei respektvoll zu allen Mitgliedern.\n2. Kein Spam, keine Werbung.\n3. Keine NSFW-Inhalte.\n4. Keine Beleidigungen oder Hassrede.\n5. Halte dich an die Discord-Richtlinien.\n6. Anweisungen vom Team sind zu befolgen.\n\nVerstoesse koennen zu Verwarnung, Timeout, Kick oder Bann fuehren.',
@@ -311,6 +313,8 @@ const texte = {
       lootruns: '🔧 loot-runs',
       wipeschedule: '📅 wipe-schedule',
       squadvoice: '🎙️ squad-voice',
+      beach: '🏖️ beach',
+      supply: '📦 supply',
     },
     keinGrund: 'No reason given',
     regelnText: '📋 **Server Rules**\n\n1. Be respectful to all members.\n2. No spam, no advertising.\n3. No NSFW content.\n4. No insults or hate speech.\n5. Follow the Discord Terms of Service.\n6. Follow staff instructions.\n\nViolations may lead to warning, timeout, kick or ban.',
@@ -351,9 +355,16 @@ const texte = {
 // Hilfsfunktion: findet einen Channel per Namen im Server und sendet eine Nachricht dorthin
 async function logSenden(guild, kanalName, text) {
   try {
-    const kanal = guild.channels.cache.find(c => c.name === kanalName);
+    let kanal = guild.channels.cache.find(c => c.name === kanalName);
+    if (!kanal) {
+      // Cache war veraltet -- frisch vom Server laden
+      const alleChannels = await guild.channels.fetch();
+      kanal = alleChannels.find(c => c && c.name === kanalName);
+    }
     if (kanal) {
       await kanal.send(text);
+    } else {
+      console.error(`Log-Channel nicht gefunden: ${kanalName}`);
     }
   } catch (err) {
     console.error(`Konnte nicht ins Log senden (${kanalName}):`, err.message);
@@ -589,6 +600,31 @@ client.on('interactionCreate', async (interaction) => {
       await rulesChannel.send(t.regelnText);
     }
 
+    // beach und supply: reine Infotafeln, NIEMAND darf schreiben (auch nicht Admin/Owner)
+    await channelOderErstellen(guild, {
+      name: t.channels.beach,
+      type: ChannelType.GuildText,
+      parent: willkommenKategorie.id,
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] },
+        { id: adminRole.id, deny: [PermissionsBitField.Flags.SendMessages] },
+        { id: headAdminRole.id, deny: [PermissionsBitField.Flags.SendMessages] },
+        { id: ownerRole.id, deny: [PermissionsBitField.Flags.SendMessages] },
+      ],
+    });
+
+    await channelOderErstellen(guild, {
+      name: t.channels.supply,
+      type: ChannelType.GuildText,
+      parent: willkommenKategorie.id,
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] },
+        { id: adminRole.id, deny: [PermissionsBitField.Flags.SendMessages] },
+        { id: headAdminRole.id, deny: [PermissionsBitField.Flags.SendMessages] },
+        { id: ownerRole.id, deny: [PermissionsBitField.Flags.SendMessages] },
+      ],
+    });
+
     // Kategorie 2: Bewerbung (eigene Kategorie, oeffentlich)
     const bewerbungKategorie = await kategorieOderErstellen(guild, t.kategorien.bewerbung);
 
@@ -617,7 +653,7 @@ client.on('interactionCreate', async (interaction) => {
       ],
     });
 
-    // mod-log: nur Owner und Head Admin sehen ihn
+    // mod-log: nur Owner und Head Admin sehen ihn (Bot braucht auch Zugriff zum Schreiben)
     await channelOderErstellen(guild, {
       name: t.channels.modlog,
       type: ChannelType.GuildText,
@@ -626,10 +662,11 @@ client.on('interactionCreate', async (interaction) => {
         { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
         { id: headAdminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
         { id: ownerRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+        { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
       ],
     });
 
-    // admin-log: nur Owner und Head Admin sehen ihn
+    // admin-log: nur Owner und Head Admin sehen ihn (Bot braucht auch Zugriff zum Schreiben)
     await channelOderErstellen(guild, {
       name: t.channels.adminlog,
       type: ChannelType.GuildText,
@@ -638,6 +675,7 @@ client.on('interactionCreate', async (interaction) => {
         { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
         { id: headAdminRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
         { id: ownerRole.id, allow: [PermissionsBitField.Flags.ViewChannel] },
+        { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
       ],
     });
 
