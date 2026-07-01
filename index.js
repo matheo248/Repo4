@@ -384,6 +384,14 @@ function istNurModerator(member, t) {
   return hatModRolle && !istAdminOderHoeher(member, t);
 }
 
+// Bestimmt in welchen Log-Channel eine Mod-Aktion soll:
+// Moderator -> mod-log, Admin/HeadAdmin/Owner -> admin-log, sonst null
+function logKanal(member, t) {
+  if (istNurModerator(member, t)) return t.channels.modlog;
+  if (istAdminOderHoeher(member, t)) return t.channels.adminlog;
+  return null;
+}
+
 // Findet einen Text/Voice-Channel per Namen, oder erstellt ihn neu falls er nicht existiert.
 // So wird bei mehrfachem /setup kein Duplikat erzeugt.
 async function channelOderErstellen(guild, optionen) {
@@ -805,8 +813,9 @@ client.on('interactionCreate', async (interaction) => {
     const target = interaction.options.getMember('user');
     if (!target) return interaction.reply({ content: t.bitteErwaehnenKick, ephemeral: true });
     await target.kick();
-    if (istNurModerator(interaction.member, t)) {
-      await logSenden(interaction.guild, t.channels.modlog, t.logKick(interaction.user.tag, target.user.tag, t.keinGrund));
+    const zielKanal = logKanal(interaction.member, t);
+    if (zielKanal) {
+      await logSenden(interaction.guild, zielKanal, t.logKick(interaction.user.tag, target.user.tag, t.keinGrund));
     }
     await interaction.reply(t.gekickt(target.user.tag));
   }
@@ -819,8 +828,9 @@ client.on('interactionCreate', async (interaction) => {
     const target = interaction.options.getMember('user');
     if (!target) return interaction.reply({ content: t.bitteErwaehnenKick, ephemeral: true });
     await target.ban();
-    if (istNurModerator(interaction.member, t)) {
-      await logSenden(interaction.guild, t.channels.modlog, t.logBan(interaction.user.tag, target.user.tag, t.keinGrund));
+    const zielKanal = logKanal(interaction.member, t);
+    if (zielKanal) {
+      await logSenden(interaction.guild, zielKanal, t.logBan(interaction.user.tag, target.user.tag, t.keinGrund));
     }
     await interaction.reply(t.gebannt(target.user.tag));
   }
@@ -833,8 +843,9 @@ client.on('interactionCreate', async (interaction) => {
     const target = interaction.options.getMember('user');
     const grund = interaction.options.getString('grund') || t.keinGrund;
     if (!target) return interaction.reply({ content: t.bitteErwaehnenKick, ephemeral: true });
-    if (istNurModerator(interaction.member, t)) {
-      await logSenden(interaction.guild, t.channels.modlog, t.logWarn(interaction.user.tag, target.user.tag, grund));
+    const zielKanal = logKanal(interaction.member, t);
+    if (zielKanal) {
+      await logSenden(interaction.guild, zielKanal, t.logWarn(interaction.user.tag, target.user.tag, grund));
     }
     await interaction.reply(t.verwarnt(target.user.tag, grund));
   }
@@ -847,8 +858,9 @@ client.on('interactionCreate', async (interaction) => {
     const target = interaction.options.getMember('user');
     if (!target) return interaction.reply({ content: t.bitteErwaehnenKick, ephemeral: true });
     await target.timeout(10 * 60 * 1000, 'Gemutet per Command');
-    if (istNurModerator(interaction.member, t)) {
-      await logSenden(interaction.guild, t.channels.modlog, t.logMute(interaction.user.tag, target.user.tag, t.keinGrund));
+    const zielKanal = logKanal(interaction.member, t);
+    if (zielKanal) {
+      await logSenden(interaction.guild, zielKanal, t.logMute(interaction.user.tag, target.user.tag, t.keinGrund));
     }
     await interaction.reply(t.gemutet(target.user.tag));
   }
@@ -865,8 +877,9 @@ client.on('interactionCreate', async (interaction) => {
     } catch (err) {
       return interaction.reply({ content: t.bitteUserId, ephemeral: true });
     }
-    if (istNurModerator(interaction.member, t)) {
-      await logSenden(interaction.guild, t.channels.modlog, t.logUnban(interaction.user.tag, userId));
+    const zielKanal = logKanal(interaction.member, t);
+    if (zielKanal) {
+      await logSenden(interaction.guild, zielKanal, t.logUnban(interaction.user.tag, userId));
     }
     await interaction.reply(t.entbannt(userId));
   }
@@ -879,8 +892,9 @@ client.on('interactionCreate', async (interaction) => {
     const target = interaction.options.getMember('user');
     if (!target) return interaction.reply({ content: t.bitteErwaehnenKick, ephemeral: true });
     await target.timeout(null);
-    if (istNurModerator(interaction.member, t)) {
-      await logSenden(interaction.guild, t.channels.modlog, t.logUntimeout(interaction.user.tag, target.user.tag));
+    const zielKanal = logKanal(interaction.member, t);
+    if (zielKanal) {
+      await logSenden(interaction.guild, zielKanal, t.logUntimeout(interaction.user.tag, target.user.tag));
     }
     await interaction.reply(t.entmutet(target.user.tag));
   }
@@ -896,8 +910,9 @@ client.on('interactionCreate', async (interaction) => {
     }
     await interaction.deferReply({ ephemeral: true });
     const geloescht = await interaction.channel.bulkDelete(anzahl, true);
-    if (istNurModerator(interaction.member, t)) {
-      await logSenden(interaction.guild, t.channels.modlog, t.logPurge(interaction.user.tag, geloescht.size, interaction.channel.name));
+    const zielKanal = logKanal(interaction.member, t);
+    if (zielKanal) {
+      await logSenden(interaction.guild, zielKanal, t.logPurge(interaction.user.tag, geloescht.size, interaction.channel.name));
     }
     await interaction.editReply(t.purgeFertig(geloescht.size));
   }
